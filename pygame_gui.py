@@ -444,11 +444,11 @@ class RPGGameGUI:
             tile = self.map_tiles[player_tile_y][player_tile_x]
             # Can't walk through water(1), trees(2), mountains(3), buildings(5)
             if tile in [1, 2, 3, 5]:
-                # Check if interacting with building
-                if tile == 5:
+                if tile in [1, 2, 3]:  # Water, trees, mountains
+                    self.player_x = old_x
+                    self.player_y = old_y
+                elif tile == 5:  # Building
                     self.check_building_interaction(player_tile_x, player_tile_y)
-                self.player_x = old_x
-                self.player_y = old_y
         else:
             # Reset position when player moves outside map boundaries
             self.player_x = old_x
