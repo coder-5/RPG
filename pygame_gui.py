@@ -435,42 +435,46 @@ class RPGGameGUI:
         if keys[pygame.K_d] or keys[pygame.K_RIGHT]:
             self.player_x += self.player_speed
 
-        # Check collision with tiles
-        player_tile_x = int(self.player_x // self.tile_size)
-        player_tile_y = int(self.player_y // self.tile_size)
+        # Only check collisions if player actually moved
+        if old_x != self.player_x or old_y != self.player_y:
+            # Check collision with tiles
+            player_tile_x = int(self.player_x // self.tile_size)
+            player_tile_y = int(self.player_y // self.tile_size)
 
-        if (0 <= player_tile_y < len(self.map_tiles) and
-            0 <= player_tile_x < len(self.map_tiles[0])):
-            tile = self.map_tiles[player_tile_y][player_tile_x]
-            # Can't walk through water(1), trees(2), mountains(3), buildings(5)
-            if tile in [1, 2, 3, 5]:
-                if tile in [1, 2, 3]:  # Water, trees, mountains
-                    self.player_x = old_x
-                    self.player_y = old_y
-                elif tile == 5:  # Building
-                    self.check_building_interaction(player_tile_x, player_tile_y)
-        else:
-            # Reset position when player moves outside map boundaries
-            self.player_x = old_x
-            self.player_y = old_y
-
-        # Check collision with NPCs
-        for npc in self.npcs:
-            if abs(self.player_x - npc["x"]) < self.tile_size and abs(self.player_y - npc["y"]) < self.tile_size:
-                self.add_log_message(f"{npc['name']}: {npc['dialog']}")
+            if (0 <= player_tile_y < len(self.map_tiles) and
+                0 <= player_tile_x < len(self.map_tiles[0])):
+                tile = self.map_tiles[player_tile_y][player_tile_x]
+                # Can't walk through water(1), trees(2), mountains(3), buildings(5)
+                if tile in [1, 2, 3, 5]:
+                    if tile in [1, 2, 3]:  # Water, trees, mountains
+                        self.player_x = old_x
+                        self.player_y = old_y
+                    elif tile == 5:  # Building
+                        self.check_building_interaction(player_tile_x, player_tile_y)
+                        self.player_x = old_x
+                        self.player_y = old_y
+            else:
+                # Reset position when player moves outside map boundaries
                 self.player_x = old_x
                 self.player_y = old_y
 
-        # Check collision with enemies
-        for enemy in self.enemies_on_map[:]:
-            if abs(self.player_x - enemy["x"]) < self.tile_size and abs(self.player_y - enemy["y"]) < self.tile_size:
-                # Start combat
-                self.add_log_message(f"Encountered a {enemy['type']}!")
-                combat_enemy = create_random_enemy(self.player.level)
-                combat_enemy.name = enemy["type"]
-                self.start_combat(combat_enemy)
-                self.enemies_on_map.remove(enemy)
-                break
+            # Check collision with NPCs
+            for npc in self.npcs:
+                if abs(self.player_x - npc["x"]) < self.tile_size and abs(self.player_y - npc["y"]) < self.tile_size:
+                    self.add_log_message(f"{npc['name']}: {npc['dialog']}")
+                    self.player_x = old_x
+                    self.player_y = old_y
+
+            # Check collision with enemies
+            for enemy in self.enemies_on_map[:]:
+                if abs(self.player_x - enemy["x"]) < self.tile_size and abs(self.player_y - enemy["y"]) < self.tile_size:
+                    # Start combat
+                    self.add_log_message(f"Encountered a {enemy['type']}!")
+                    combat_enemy = create_random_enemy(self.player.level)
+                    combat_enemy.name = enemy["type"]
+                    self.start_combat(combat_enemy)
+                    self.enemies_on_map.remove(enemy)
+                    break
 
         # Update camera to follow player
         self.camera_x = self.player_x - SCREEN_WIDTH // 2
