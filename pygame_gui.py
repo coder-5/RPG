@@ -156,6 +156,11 @@ class RPGGameGUI:
         self.enemies_on_map = []
         self.buildings = []
 
+        # Dialog state
+        self.dialog_active = False
+        self.dialog_npc_name = ""
+        self.dialog_text = ""
+
         self.running = True
 
     def run(self):
@@ -471,6 +476,13 @@ class RPGGameGUI:
     def handle_map_events(self, event):
         """Handle events on the map"""
         if event.type == pygame.KEYDOWN:
+            # If dialog is active, dismiss it on any key press
+            if self.dialog_active:
+                if event.key in [pygame.K_SPACE, pygame.K_RETURN, pygame.K_ESCAPE]:
+                    self.dialog_active = False
+                return  # Don't process other keys while dialog is open
+
+            # Normal map controls (only when no dialog)
             if event.key == pygame.K_i:
                 self.state = "inventory"
                 self.create_inventory_ui()
@@ -483,6 +495,10 @@ class RPGGameGUI:
 
     def update_map(self):
         """Update map state (player movement, camera)"""
+        # Don't allow movement while dialog is active
+        if self.dialog_active:
+            return
+
         # Get keys pressed
         keys = pygame.key.get_pressed()
 
@@ -530,7 +546,8 @@ class RPGGameGUI:
                 dy = self.player_y - npc["y"]
                 distance = (dx * dx + dy * dy) ** 0.5
                 if distance < self.TILE_SIZE:
-                    self.add_log_message(f"{npc['name']}: {npc['dialog']}")
+                    # Show dialog box
+                    self.show_dialog(npc["name"], npc["dialog"])
                     self.player_x = old_x
                     self.player_y = old_y
 
@@ -579,6 +596,82 @@ class RPGGameGUI:
             # Guild
             self.state = "quests"
             self.create_quests_ui()
+
+    def show_dialog(self, npc_name, dialog_text):
+        """Show dialog box with NPC conversation"""
+        self.dialog_active = True
+        self.dialog_npc_name = npc_name
+        self.dialog_text = dialog_text
+
+    def draw_dialog_box(self):
+        """Draw the dialog box overlay"""
+        if not self.dialog_active:
+            return
+
+        # Dialog box dimensions
+        box_width = 900
+        box_height = 200
+        box_x = (SCREEN_WIDTH - box_width) // 2
+        box_y = SCREEN_HEIGHT - box_height - 50
+
+        # Semi-transparent overlay over entire screen
+        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 128))  # Semi-transparent black
+        self.screen.blit(overlay, (0, 0))
+
+        # Dialog box background
+        dialog_bg = pygame.Surface((box_width, box_height))
+        dialog_bg.fill((40, 40, 60))  # Dark blue-gray
+        self.screen.blit(dialog_bg, (box_x, box_y))
+
+        # Border
+        pygame.draw.rect(self.screen, GOLD, (box_x, box_y, box_width, box_height), 4)
+
+        # Inner border decoration
+        pygame.draw.rect(self.screen, (100, 100, 120), (box_x + 8, box_y + 8, box_width - 16, box_height - 16), 2)
+
+        # NPC name header
+        name_bg = pygame.Rect(box_x + 20, box_y - 20, 200, 40)
+        pygame.draw.rect(self.screen, (60, 60, 80), name_bg)
+        pygame.draw.rect(self.screen, GOLD, name_bg, 3)
+
+        name_surf = self.normal_font.render(self.dialog_npc_name, True, YELLOW)
+        name_rect = name_surf.get_rect(center=name_bg.center)
+        self.screen.blit(name_surf, name_rect)
+
+        # Dialog text with word wrapping
+        self.draw_wrapped_dialog_text(self.dialog_text, box_x + 30, box_y + 30, box_width - 60)
+
+        # Prompt to continue
+        prompt = self.small_font.render("Press SPACE or ENTER to continue...", True, LIGHT_GRAY)
+        prompt_rect = prompt.get_rect(bottomright=(box_x + box_width - 20, box_y + box_height - 15))
+        self.screen.blit(prompt, prompt_rect)
+
+    def draw_wrapped_dialog_text(self, text, x, y, max_width):
+        """Draw dialog text with word wrapping"""
+        words = text.split(' ')
+        lines = []
+        current_line = []
+
+        for word in words:
+            current_line.append(word)
+            test_line = ' '.join(current_line)
+            if self.normal_font.size(test_line)[0] > max_width:
+                if len(current_line) > 1:
+                    current_line.pop()
+                    lines.append(' '.join(current_line))
+                    current_line = [word]
+                else:
+                    lines.append(test_line)
+                    current_line = []
+
+        if current_line:
+            lines.append(' '.join(current_line))
+
+        # Draw each line
+        for i, line in enumerate(lines[:5]):  # Max 5 lines
+            surf = self.normal_font.render(line, True, WHITE)
+            self.screen.blit(surf, (x, y + i * 35))
 
     def draw_map_screen(self):
         """Draw the map view"""
@@ -656,6 +749,9 @@ class RPGGameGUI:
 
         # Draw HUD
         self.draw_map_hud()
+
+        # Draw dialog box on top (if active)
+        self.draw_dialog_box()
 
     def draw_map_hud(self):
         """Draw HUD overlay on map"""
