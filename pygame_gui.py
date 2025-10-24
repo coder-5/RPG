@@ -529,7 +529,9 @@ class RPGGameGUI:
                     pygame.draw.rect(self.screen, (139, 69, 19), (x, y, self.tile_size, self.tile_size))
 
                 # Draw grid
-                pygame.draw.rect(self.screen, (0, 0, 0, 50), (x, y, self.tile_size, self.tile_size), 1)
+                s = pygame.Surface((self.tile_size, self.tile_size), pygame.SRCALPHA)
+                pygame.draw.rect(s, (0, 0, 0, 50), (0, 0, self.tile_size, self.tile_size), 1)
+                self.screen.blit(s, (x, y))
 
         # Draw NPCs
         for npc in self.npcs:
