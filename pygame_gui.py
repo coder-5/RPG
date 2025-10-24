@@ -426,27 +426,42 @@ class RPGGameGUI:
         ]
 
     def spawn_enemies(self):
-        """Spawn enemies outside the town area"""
+        """Spawn enemies outside the town area on walkable tiles"""
         self.enemies_on_map = []
         town_min = self.TOWN_CENTER_X - self.TOWN_SIZE // 2
         town_max = self.TOWN_CENTER_X + self.TOWN_SIZE // 2
 
+        # Walkable tiles for enemy spawning
+        walkable_tiles = [self.TILE_GRASS, self.TILE_ROAD]
+
+        enemies_spawned = 0
         for i in range(self.NUM_ENEMIES):
-            # Place enemies outside town
-            while True:
-                ex = random.randint(5, self.MAP_WIDTH - 6) * self.TILE_SIZE
-                ey = random.randint(5, self.MAP_HEIGHT - 6) * self.TILE_SIZE
-                ex_tile = ex // self.TILE_SIZE
-                ey_tile = ey // self.TILE_SIZE
+            # Prevent infinite loop with attempt counter
+            attempts = 0
+            max_attempts = 100
+
+            while attempts < max_attempts:
+                attempts += 1
+                ex_tile = random.randint(5, self.MAP_WIDTH - 6)
+                ey_tile = random.randint(5, self.MAP_HEIGHT - 6)
 
                 # Check if outside town area
                 if not (town_min <= ex_tile <= town_max and town_min <= ey_tile <= town_max):
-                    self.enemies_on_map.append({
-                        "x": ex, "y": ey,
-                        "type": random.choice(["Slime", "Goblin", "Wolf"]),
-                        "color": random.choice([RED, DARK_RED, (255, 100, 0)])
-                    })
-                    break
+                    # Check if tile is walkable
+                    if self.map_tiles[ey_tile][ex_tile] in walkable_tiles:
+                        self.enemies_on_map.append({
+                            "x": ex_tile * self.TILE_SIZE,
+                            "y": ey_tile * self.TILE_SIZE,
+                            "type": random.choice(["Slime", "Goblin", "Wolf"]),
+                            "color": random.choice([RED, DARK_RED, (255, 100, 0)])
+                        })
+                        enemies_spawned += 1
+                        break
+
+            # Warn if couldn't spawn all enemies
+            if attempts >= max_attempts:
+                print(f"Warning: Could only spawn {enemies_spawned}/{self.NUM_ENEMIES} enemies")
+                break
 
     def initialize_camera(self):
         """Initialize camera to center on player"""
@@ -508,16 +523,24 @@ class RPGGameGUI:
                 self.player_x = old_x
                 self.player_y = old_y
 
-            # Check collision with NPCs
+            # Check collision with NPCs using proper distance calculation
             for npc in self.npcs:
-                if abs(self.player_x - npc["x"]) < self.TILE_SIZE and abs(self.player_y - npc["y"]) < self.TILE_SIZE:
+                # Calculate Euclidean distance
+                dx = self.player_x - npc["x"]
+                dy = self.player_y - npc["y"]
+                distance = (dx * dx + dy * dy) ** 0.5
+                if distance < self.TILE_SIZE:
                     self.add_log_message(f"{npc['name']}: {npc['dialog']}")
                     self.player_x = old_x
                     self.player_y = old_y
 
-            # Check collision with enemies
+            # Check collision with enemies using proper distance calculation
             for enemy in self.enemies_on_map[:]:
-                if abs(self.player_x - enemy["x"]) < self.TILE_SIZE and abs(self.player_y - enemy["y"]) < self.TILE_SIZE:
+                # Calculate Euclidean distance
+                dx = self.player_x - enemy["x"]
+                dy = self.player_y - enemy["y"]
+                distance = (dx * dx + dy * dy) ** 0.5
+                if distance < self.TILE_SIZE:
                     # Start combat
                     self.add_log_message(f"Encountered a {enemy['type']}!")
                     combat_enemy = create_random_enemy(self.player.level)
@@ -526,15 +549,15 @@ class RPGGameGUI:
                     self.enemies_on_map.remove(enemy)
                     break
 
-        # Update camera to follow player
-        self.camera_x = self.player_x - SCREEN_WIDTH // 2
-        self.camera_y = self.player_y - SCREEN_HEIGHT // 2
+            # Update camera to follow player (only when player moves)
+            self.camera_x = self.player_x - SCREEN_WIDTH // 2
+            self.camera_y = self.player_y - SCREEN_HEIGHT // 2
 
-        # Clamp camera to map bounds
-        max_camera_x = len(self.map_tiles[0]) * self.TILE_SIZE - SCREEN_WIDTH
-        max_camera_y = len(self.map_tiles) * self.TILE_SIZE - SCREEN_HEIGHT
-        self.camera_x = max(0, min(self.camera_x, max_camera_x))
-        self.camera_y = max(0, min(self.camera_y, max_camera_y))
+            # Clamp camera to map bounds
+            max_camera_x = len(self.map_tiles[0]) * self.TILE_SIZE - SCREEN_WIDTH
+            max_camera_y = len(self.map_tiles) * self.TILE_SIZE - SCREEN_HEIGHT
+            self.camera_x = max(0, min(self.camera_x, max_camera_x))
+            self.camera_y = max(0, min(self.camera_y, max_camera_y))
 
     def check_building_interaction(self, tile_x, tile_y):
         """Check which building the player is interacting with"""
