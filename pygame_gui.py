@@ -446,6 +446,10 @@ class RPGGameGUI:
             if tile in [1, 2, 3, 5]:
                 self.player_x = old_x
                 self.player_y = old_y
+        else:
+            # Reset position when player moves outside map boundaries
+            self.player_x = old_x
+            self.player_y = old_y
 
                 # Check if interacting with building
                 if tile == 5:
