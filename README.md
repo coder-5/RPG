@@ -1,6 +1,6 @@
 # RPG Adventure Game
 
-A text-based role-playing game featuring character progression, turn-based combat, quests, and exploration.
+A role-playing game featuring character progression, turn-based combat, quests, and exploration with both graphical and text-based interfaces.
 
 ## Features
 
@@ -16,13 +16,26 @@ A text-based role-playing game featuring character progression, turn-based comba
 ## Requirements
 
 - Python 3.6 or higher
+- Pygame (for GUI version only)
 
 ## Installation
 
 1. Clone or download this repository
 2. Navigate to the game directory
-3. Run the game:
+3. For the GUI version, install pygame:
 
+```bash
+pip install pygame
+```
+
+4. Run the game:
+
+**GUI Version (Recommended):**
+```bash
+python3 pygame_gui.py
+```
+
+**Text-Based Version:**
 ```bash
 python3 game.py
 ```
@@ -47,7 +60,14 @@ When starting a new game, you'll create your character by:
 
 ### Game Controls
 
-The game is menu-driven. Simply enter the number corresponding to your choice.
+**GUI Version:**
+- Use your mouse to click buttons and navigate menus
+- Click on inventory items to use or equip them
+- Click on shop items to purchase them
+- Combat uses interactive buttons for each action
+
+**Text-Based Version:**
+- The game is menu-driven. Simply enter the number corresponding to your choice.
 
 ### Main Actions
 
@@ -106,7 +126,8 @@ Accept and complete quests to earn gold, experience, and special items:
 
 ## Game Files
 
-- `game.py`: Main game file and entry point
+- `pygame_gui.py`: Pygame GUI version (recommended)
+- `game.py`: Text-based version and entry point
 - `character.py`: Character, player, enemy, and item classes
 - `combat.py`: Combat system and battle mechanics
 - `world.py`: Game world, locations, shops, and quests
