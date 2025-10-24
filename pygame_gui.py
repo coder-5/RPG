@@ -96,6 +96,28 @@ class TextBox:
 class RPGGameGUI:
     """Main game GUI class"""
 
+    # Map constants
+    TILE_SIZE = 32
+    MAP_WIDTH = 50
+    MAP_HEIGHT = 50
+    PLAYER_SPEED = 4
+
+    # Map tile types
+    TILE_GRASS = 0
+    TILE_WATER = 1
+    TILE_TREE = 2
+    TILE_MOUNTAIN = 3
+    TILE_ROAD = 4
+    TILE_BUILDING = 5
+
+    # Town layout constants
+    TOWN_CENTER_X = 25
+    TOWN_CENTER_Y = 25
+    TOWN_SIZE = 10
+
+    # Enemy spawn constants
+    NUM_ENEMIES = 15
+
     def __init__(self):
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         pygame.display.set_caption("RPG Adventure")
@@ -129,7 +151,6 @@ class RPGGameGUI:
         self.player_y = 300
         self.camera_x = 0
         self.camera_y = 0
-        self.tile_size = 32
         self.map_tiles = []
         self.npcs = []
         self.enemies_on_map = []
@@ -332,58 +353,94 @@ class RPGGameGUI:
     # ===== MAP SYSTEM =====
     def init_map(self):
         """Initialize the game map"""
-        # Create a larger tile-based map (50x50 tiles)
-        map_width = 50
-        map_height = 50
+        self.generate_terrain()
+        self.initialize_player_position()
+        self.place_npcs()
+        self.spawn_enemies()
+        self.initialize_camera()
 
-        # Generate map (0=grass, 1=water, 2=tree, 3=mountain, 4=road, 5=building)
+        if not hasattr(self, 'game_log'):
+            self.game_log = []
+        self.add_log_message("Welcome to the world! Use WASD or Arrow Keys to move.")
+        self.add_log_message("Press I for inventory, M for menu, Q for quests.")
+
+    def generate_terrain(self):
+        """Generate the tile-based terrain map"""
         self.map_tiles = []
-        for y in range(map_height):
+        town_min = self.TOWN_CENTER_X - self.TOWN_SIZE // 2
+        town_max = self.TOWN_CENTER_X + self.TOWN_SIZE // 2
+
+        for y in range(self.MAP_HEIGHT):
             row = []
-            for x in range(map_width):
-                # Create interesting terrain
-                if x < 2 or x > map_width - 3 or y < 2 or y > map_height - 3:
-                    row.append(2)  # Trees around edges
-                elif 20 <= x <= 30 and 20 <= y <= 30:
-                    # Town area
-                    if (x == 25 and 22 <= y <= 28) or (22 <= x <= 28 and y == 25):
-                        row.append(4)  # Roads
-                    elif x == 23 and y == 23:
-                        row.append(5)  # Shop building
-                    elif x == 27 and y == 23:
-                        row.append(5)  # Inn building
-                    elif x == 25 and y == 27:
-                        row.append(5)  # Guild building
-                    else:
-                        row.append(0)  # Grass
+            for x in range(self.MAP_WIDTH):
+                # Create border of trees
+                if x < 2 or x > self.MAP_WIDTH - 3 or y < 2 or y > self.MAP_HEIGHT - 3:
+                    row.append(self.TILE_TREE)
+                # Town area
+                elif town_min <= x <= town_max and town_min <= y <= town_max:
+                    tile = self._get_town_tile(x, y)
+                    row.append(tile)
+                # Random water patches
                 elif (x + y) % 20 == 0:
-                    row.append(1)  # Small water patches
+                    row.append(self.TILE_WATER)
+                # Random trees (10% chance)
                 elif random.random() < 0.1:
-                    row.append(2)  # Random trees
+                    row.append(self.TILE_TREE)
                 else:
-                    row.append(0)  # Grass
+                    row.append(self.TILE_GRASS)
             self.map_tiles.append(row)
 
-        # Player starting position
-        self.player_x = 25 * self.tile_size
-        self.player_y = 15 * self.tile_size
+    def _get_town_tile(self, x, y):
+        """Get the appropriate tile for a town coordinate"""
+        # Roads (cross pattern)
+        if (x == self.TOWN_CENTER_X and 22 <= y <= 28) or (22 <= x <= 28 and y == self.TOWN_CENTER_Y):
+            return self.TILE_ROAD
+        # Shop building
+        elif x == 23 and y == 23:
+            return self.TILE_BUILDING
+        # Inn building
+        elif x == 27 and y == 23:
+            return self.TILE_BUILDING
+        # Guild building
+        elif x == self.TOWN_CENTER_X and y == 27:
+            return self.TILE_BUILDING
+        else:
+            return self.TILE_GRASS
 
-        # Create NPCs
+    def initialize_player_position(self):
+        """Set the player's starting position"""
+        self.player_x = self.TOWN_CENTER_X * self.TILE_SIZE
+        self.player_y = 15 * self.TILE_SIZE
+
+    def place_npcs(self):
+        """Place NPCs on the map"""
         self.npcs = [
-            {"x": 23 * self.tile_size, "y": 22 * self.tile_size, "name": "Shopkeeper", "color": BLUE, "dialog": "Welcome to my shop!"},
-            {"x": 27 * self.tile_size, "y": 22 * self.tile_size, "name": "Innkeeper", "color": PURPLE, "dialog": "Rest here for 10 gold."},
-            {"x": 25 * self.tile_size, "y": 26 * self.tile_size, "name": "Guild Master", "color": GOLD, "dialog": "I have quests for brave adventurers!"},
-            {"x": 20 * self.tile_size, "y": 15 * self.tile_size, "name": "Village Elder", "color": WHITE, "dialog": "Beware of monsters outside town!"},
+            {"x": 23 * self.TILE_SIZE, "y": 22 * self.TILE_SIZE,
+             "name": "Shopkeeper", "color": BLUE, "dialog": "Welcome to my shop!"},
+            {"x": 27 * self.TILE_SIZE, "y": 22 * self.TILE_SIZE,
+             "name": "Innkeeper", "color": PURPLE, "dialog": "Rest here for 10 gold."},
+            {"x": self.TOWN_CENTER_X * self.TILE_SIZE, "y": 26 * self.TILE_SIZE,
+             "name": "Guild Master", "color": GOLD, "dialog": "I have quests for brave adventurers!"},
+            {"x": 20 * self.TILE_SIZE, "y": 15 * self.TILE_SIZE,
+             "name": "Village Elder", "color": WHITE, "dialog": "Beware of monsters outside town!"},
         ]
 
-        # Create enemies on map
+    def spawn_enemies(self):
+        """Spawn enemies outside the town area"""
         self.enemies_on_map = []
-        for i in range(15):
+        town_min = self.TOWN_CENTER_X - self.TOWN_SIZE // 2
+        town_max = self.TOWN_CENTER_X + self.TOWN_SIZE // 2
+
+        for i in range(self.NUM_ENEMIES):
             # Place enemies outside town
             while True:
-                ex = random.randint(5, 45) * self.tile_size
-                ey = random.randint(5, 45) * self.tile_size
-                if not (20 <= ex // self.tile_size <= 30 and 20 <= ey // self.tile_size <= 30):
+                ex = random.randint(5, self.MAP_WIDTH - 6) * self.TILE_SIZE
+                ey = random.randint(5, self.MAP_HEIGHT - 6) * self.TILE_SIZE
+                ex_tile = ex // self.TILE_SIZE
+                ey_tile = ey // self.TILE_SIZE
+
+                # Check if outside town area
+                if not (town_min <= ex_tile <= town_max and town_min <= ey_tile <= town_max):
                     self.enemies_on_map.append({
                         "x": ex, "y": ey,
                         "type": random.choice(["Slime", "Goblin", "Wolf"]),
@@ -391,18 +448,10 @@ class RPGGameGUI:
                     })
                     break
 
-        # Initialize camera to center on player
+    def initialize_camera(self):
+        """Initialize camera to center on player"""
         self.camera_x = self.player_x - SCREEN_WIDTH // 2
         self.camera_y = self.player_y - SCREEN_HEIGHT // 2
-
-        # Movement
-        self.player_speed = 4
-        self.move_cooldown = 0
-
-        if not hasattr(self, 'game_log'):
-            self.game_log = []
-        self.add_log_message("Welcome to the world! Use WASD or Arrow Keys to move.")
-        self.add_log_message("Press I for inventory, M for menu, Q for quests.")
 
     def handle_map_events(self, event):
         """Handle events on the map"""
@@ -427,29 +476,30 @@ class RPGGameGUI:
 
         # Movement
         if keys[pygame.K_w] or keys[pygame.K_UP]:
-            self.player_y -= self.player_speed
+            self.player_y -= self.PLAYER_SPEED
         if keys[pygame.K_s] or keys[pygame.K_DOWN]:
-            self.player_y += self.player_speed
+            self.player_y += self.PLAYER_SPEED
         if keys[pygame.K_a] or keys[pygame.K_LEFT]:
-            self.player_x -= self.player_speed
+            self.player_x -= self.PLAYER_SPEED
         if keys[pygame.K_d] or keys[pygame.K_RIGHT]:
-            self.player_x += self.player_speed
+            self.player_x += self.PLAYER_SPEED
 
         # Only check collisions if player actually moved
         if old_x != self.player_x or old_y != self.player_y:
             # Check collision with tiles
-            player_tile_x = int(self.player_x // self.tile_size)
-            player_tile_y = int(self.player_y // self.tile_size)
+            player_tile_x = int(self.player_x // self.TILE_SIZE)
+            player_tile_y = int(self.player_y // self.TILE_SIZE)
 
             if (0 <= player_tile_y < len(self.map_tiles) and
                 0 <= player_tile_x < len(self.map_tiles[0])):
                 tile = self.map_tiles[player_tile_y][player_tile_x]
-                # Can't walk through water(1), trees(2), mountains(3), buildings(5)
-                if tile in [1, 2, 3, 5]:
-                    if tile in [1, 2, 3]:  # Water, trees, mountains
+                # Can't walk through water, trees, mountains, buildings
+                impassable = [self.TILE_WATER, self.TILE_TREE, self.TILE_MOUNTAIN, self.TILE_BUILDING]
+                if tile in impassable:
+                    if tile in [self.TILE_WATER, self.TILE_TREE, self.TILE_MOUNTAIN]:
                         self.player_x = old_x
                         self.player_y = old_y
-                    elif tile == 5:  # Building
+                    elif tile == self.TILE_BUILDING:
                         self.check_building_interaction(player_tile_x, player_tile_y)
                         self.player_x = old_x
                         self.player_y = old_y
@@ -460,14 +510,14 @@ class RPGGameGUI:
 
             # Check collision with NPCs
             for npc in self.npcs:
-                if abs(self.player_x - npc["x"]) < self.tile_size and abs(self.player_y - npc["y"]) < self.tile_size:
+                if abs(self.player_x - npc["x"]) < self.TILE_SIZE and abs(self.player_y - npc["y"]) < self.TILE_SIZE:
                     self.add_log_message(f"{npc['name']}: {npc['dialog']}")
                     self.player_x = old_x
                     self.player_y = old_y
 
             # Check collision with enemies
             for enemy in self.enemies_on_map[:]:
-                if abs(self.player_x - enemy["x"]) < self.tile_size and abs(self.player_y - enemy["y"]) < self.tile_size:
+                if abs(self.player_x - enemy["x"]) < self.TILE_SIZE and abs(self.player_y - enemy["y"]) < self.TILE_SIZE:
                     # Start combat
                     self.add_log_message(f"Encountered a {enemy['type']}!")
                     combat_enemy = create_random_enemy(self.player.level)
@@ -481,8 +531,8 @@ class RPGGameGUI:
         self.camera_y = self.player_y - SCREEN_HEIGHT // 2
 
         # Clamp camera to map bounds
-        max_camera_x = len(self.map_tiles[0]) * self.tile_size - SCREEN_WIDTH
-        max_camera_y = len(self.map_tiles) * self.tile_size - SCREEN_HEIGHT
+        max_camera_x = len(self.map_tiles[0]) * self.TILE_SIZE - SCREEN_WIDTH
+        max_camera_y = len(self.map_tiles) * self.TILE_SIZE - SCREEN_HEIGHT
         self.camera_x = max(0, min(self.camera_x, max_camera_x))
         self.camera_y = max(0, min(self.camera_y, max_camera_y))
 
@@ -509,75 +559,77 @@ class RPGGameGUI:
 
     def draw_map_screen(self):
         """Draw the map view"""
-        # Draw tiles
-        start_col = max(0, int(self.camera_x // self.tile_size))
-        end_col = min(len(self.map_tiles[0]), int((self.camera_x + SCREEN_WIDTH) // self.tile_size) + 1)
-        start_row = max(0, int(self.camera_y // self.tile_size))
-        end_row = min(len(self.map_tiles), int((self.camera_y + SCREEN_HEIGHT) // self.tile_size) + 1)
+        # Draw tiles (only visible ones)
+        start_col = max(0, int(self.camera_x // self.TILE_SIZE))
+        end_col = min(len(self.map_tiles[0]), int((self.camera_x + SCREEN_WIDTH) // self.TILE_SIZE) + 1)
+        start_row = max(0, int(self.camera_y // self.TILE_SIZE))
+        end_row = min(len(self.map_tiles), int((self.camera_y + SCREEN_HEIGHT) // self.TILE_SIZE) + 1)
 
         for row in range(start_row, end_row):
             for col in range(start_col, end_col):
                 tile = self.map_tiles[row][col]
-                x = col * self.tile_size - self.camera_x
-                y = row * self.tile_size - self.camera_y
+                x = col * self.TILE_SIZE - self.camera_x
+                y = row * self.TILE_SIZE - self.camera_y
 
                 # Draw tile based on type
-                if tile == 0:  # Grass
-                    pygame.draw.rect(self.screen, (34, 139, 34), (x, y, self.tile_size, self.tile_size))
-                elif tile == 1:  # Water
-                    pygame.draw.rect(self.screen, (30, 144, 255), (x, y, self.tile_size, self.tile_size))
-                elif tile == 2:  # Tree
-                    pygame.draw.rect(self.screen, (0, 100, 0), (x, y, self.tile_size, self.tile_size))
-                elif tile == 3:  # Mountain
-                    pygame.draw.rect(self.screen, GRAY, (x, y, self.tile_size, self.tile_size))
-                elif tile == 4:  # Road
-                    pygame.draw.rect(self.screen, (139, 90, 43), (x, y, self.tile_size, self.tile_size))
-                elif tile == 5:  # Building
-                    pygame.draw.rect(self.screen, (139, 69, 19), (x, y, self.tile_size, self.tile_size))
+                if tile == self.TILE_GRASS:
+                    pygame.draw.rect(self.screen, (34, 139, 34), (x, y, self.TILE_SIZE, self.TILE_SIZE))
+                elif tile == self.TILE_WATER:
+                    pygame.draw.rect(self.screen, (30, 144, 255), (x, y, self.TILE_SIZE, self.TILE_SIZE))
+                elif tile == self.TILE_TREE:
+                    pygame.draw.rect(self.screen, (0, 100, 0), (x, y, self.TILE_SIZE, self.TILE_SIZE))
+                elif tile == self.TILE_MOUNTAIN:
+                    pygame.draw.rect(self.screen, GRAY, (x, y, self.TILE_SIZE, self.TILE_SIZE))
+                elif tile == self.TILE_ROAD:
+                    pygame.draw.rect(self.screen, (139, 90, 43), (x, y, self.TILE_SIZE, self.TILE_SIZE))
+                elif tile == self.TILE_BUILDING:
+                    pygame.draw.rect(self.screen, (139, 69, 19), (x, y, self.TILE_SIZE, self.TILE_SIZE))
 
                 # Draw grid
-                s = pygame.Surface((self.tile_size, self.tile_size), pygame.SRCALPHA)
-                pygame.draw.rect(s, (0, 0, 0, 50), (0, 0, self.tile_size, self.tile_size), 1)
+                s = pygame.Surface((self.TILE_SIZE, self.TILE_SIZE), pygame.SRCALPHA)
+                pygame.draw.rect(s, (0, 0, 0, 50), (0, 0, self.TILE_SIZE, self.TILE_SIZE), 1)
                 self.screen.blit(s, (x, y))
 
-        # Draw NPCs
+        # Draw NPCs (only visible ones)
         for npc in self.npcs:
             npc_x = npc["x"] - self.camera_x
             npc_y = npc["y"] - self.camera_y
-            if -self.tile_size < npc_x < SCREEN_WIDTH and -self.tile_size < npc_y < SCREEN_HEIGHT:
+            # Only draw if on screen
+            if -self.TILE_SIZE < npc_x < SCREEN_WIDTH and -self.TILE_SIZE < npc_y < SCREEN_HEIGHT:
                 pygame.draw.circle(self.screen, npc["color"],
-                                 (int(npc_x + self.tile_size // 2), int(npc_y + self.tile_size // 2)),
-                                 self.tile_size // 3)
+                                 (int(npc_x + self.TILE_SIZE // 2), int(npc_y + self.TILE_SIZE // 2)),
+                                 self.TILE_SIZE // 3)
                 # Draw name
                 name_surf = self.small_font.render(npc["name"], True, WHITE)
-                name_rect = name_surf.get_rect(center=(npc_x + self.tile_size // 2, npc_y - 10))
+                name_rect = name_surf.get_rect(center=(npc_x + self.TILE_SIZE // 2, npc_y - 10))
                 self.screen.blit(name_surf, name_rect)
 
-        # Draw enemies
+        # Draw enemies (only visible ones)
         for enemy in self.enemies_on_map:
             enemy_x = enemy["x"] - self.camera_x
             enemy_y = enemy["y"] - self.camera_y
-            if -self.tile_size < enemy_x < SCREEN_WIDTH and -self.tile_size < enemy_y < SCREEN_HEIGHT:
+            # Only draw if on screen
+            if -self.TILE_SIZE < enemy_x < SCREEN_WIDTH and -self.TILE_SIZE < enemy_y < SCREEN_HEIGHT:
                 pygame.draw.circle(self.screen, enemy["color"],
-                                 (int(enemy_x + self.tile_size // 2), int(enemy_y + self.tile_size // 2)),
-                                 self.tile_size // 3)
+                                 (int(enemy_x + self.TILE_SIZE // 2), int(enemy_y + self.TILE_SIZE // 2)),
+                                 self.TILE_SIZE // 3)
                 # Draw type
                 type_surf = self.small_font.render(enemy["type"][0], True, WHITE)
-                type_rect = type_surf.get_rect(center=(enemy_x + self.tile_size // 2, enemy_y + self.tile_size // 2))
+                type_rect = type_surf.get_rect(center=(enemy_x + self.TILE_SIZE // 2, enemy_y + self.TILE_SIZE // 2))
                 self.screen.blit(type_surf, type_rect)
 
         # Draw player
         player_screen_x = self.player_x - self.camera_x
         player_screen_y = self.player_y - self.camera_y
         pygame.draw.circle(self.screen, YELLOW,
-                         (int(player_screen_x + self.tile_size // 2),
-                          int(player_screen_y + self.tile_size // 2)),
-                         self.tile_size // 2)
+                         (int(player_screen_x + self.TILE_SIZE // 2),
+                          int(player_screen_y + self.TILE_SIZE // 2)),
+                         self.TILE_SIZE // 2)
         # Draw player indicator
         pygame.draw.circle(self.screen, WHITE,
-                         (int(player_screen_x + self.tile_size // 2),
-                          int(player_screen_y + self.tile_size // 2)),
-                         self.tile_size // 2, 2)
+                         (int(player_screen_x + self.TILE_SIZE // 2),
+                          int(player_screen_y + self.TILE_SIZE // 2)),
+                         self.TILE_SIZE // 2, 2)
 
         # Draw HUD
         self.draw_map_hud()
