@@ -184,24 +184,25 @@ class RPGGameGUI:
                 (self.TILE_SIZE, self.TILE_SIZE))
 
             # Load player sprite sheet and extract first frame
+            # Make player sprite larger (64x64) so it doesn't get cut off
             player_sheet = pygame.image.load("sprites/Active/Player.png")
             self.sprite_player = pygame.Surface((16, 16), pygame.SRCALPHA)
             self.sprite_player.blit(player_sheet, (0, 0), (0, 0, 16, 16))
             self.sprite_player = pygame.transform.scale(self.sprite_player,
-                (self.TILE_SIZE, self.TILE_SIZE))
+                (self.TILE_SIZE * 2, self.TILE_SIZE * 2))
 
-            # Load enemy sprites
+            # Load enemy sprites - make them larger too
             slime_sheet = pygame.image.load("sprites/Active/Slime_Green.png")
             self.sprite_slime = pygame.Surface((16, 16), pygame.SRCALPHA)
             self.sprite_slime.blit(slime_sheet, (0, 0), (0, 0, 16, 16))
             self.sprite_slime = pygame.transform.scale(self.sprite_slime,
-                (self.TILE_SIZE, self.TILE_SIZE))
+                (self.TILE_SIZE * 2, self.TILE_SIZE * 2))
 
             skeleton_sheet = pygame.image.load("sprites/Active/Skeleton.png")
             self.sprite_skeleton = pygame.Surface((16, 16), pygame.SRCALPHA)
             self.sprite_skeleton.blit(skeleton_sheet, (0, 0), (0, 0, 16, 16))
             self.sprite_skeleton = pygame.transform.scale(self.sprite_skeleton,
-                (self.TILE_SIZE, self.TILE_SIZE))
+                (self.TILE_SIZE * 2, self.TILE_SIZE * 2))
 
             self.sprites_loaded = True
         except Exception as e:
@@ -811,9 +812,13 @@ class RPGGameGUI:
             # Only draw if on screen
             if -self.TILE_SIZE < enemy_x < SCREEN_WIDTH and -self.TILE_SIZE < enemy_y < SCREEN_HEIGHT:
                 if self.sprites_loaded and enemy["type"] == "Slime":
-                    self.screen.blit(self.sprite_slime, (enemy_x, enemy_y))
+                    # Center the larger sprite (64x64) on the tile position (32x32)
+                    sprite_offset = self.TILE_SIZE // 2
+                    self.screen.blit(self.sprite_slime, (enemy_x - sprite_offset, enemy_y - sprite_offset))
                 elif self.sprites_loaded and enemy["type"] in ["Goblin", "Wolf"]:
-                    self.screen.blit(self.sprite_skeleton, (enemy_x, enemy_y))
+                    # Center the larger sprite (64x64) on the tile position (32x32)
+                    sprite_offset = self.TILE_SIZE // 2
+                    self.screen.blit(self.sprite_skeleton, (enemy_x - sprite_offset, enemy_y - sprite_offset))
                 else:
                     pygame.draw.circle(self.screen, enemy["color"],
                                      (int(enemy_x + self.TILE_SIZE // 2), int(enemy_y + self.TILE_SIZE // 2)),
@@ -827,7 +832,9 @@ class RPGGameGUI:
         player_screen_x = self.player_x - self.camera_x
         player_screen_y = self.player_y - self.camera_y
         if self.sprites_loaded:
-            self.screen.blit(self.sprite_player, (player_screen_x, player_screen_y))
+            # Center the larger sprite (64x64) on the tile position (32x32)
+            sprite_offset = self.TILE_SIZE // 2  # Offset by 16 pixels to center
+            self.screen.blit(self.sprite_player, (player_screen_x - sprite_offset, player_screen_y - sprite_offset))
         else:
             pygame.draw.circle(self.screen, YELLOW,
                              (int(player_screen_x + self.TILE_SIZE // 2),
