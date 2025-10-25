@@ -130,6 +130,9 @@ class RPGGameGUI:
         self.normal_font = pygame.font.Font(None, 28)
         self.small_font = pygame.font.Font(None, 24)
 
+        # Load sprites
+        self.load_sprites()
+
         # Game state
         self.state = "main_menu"
         self.player = None
@@ -162,6 +165,48 @@ class RPGGameGUI:
         self.dialog_text = ""
 
         self.running = True
+
+    def load_sprites(self):
+        """Load all sprite images"""
+        try:
+            # Load and scale tile sprites to TILE_SIZE
+            self.sprite_grass = pygame.transform.scale(
+                pygame.image.load("sprites/Active/Grass_Middle.png"),
+                (self.TILE_SIZE, self.TILE_SIZE))
+            self.sprite_water = pygame.transform.scale(
+                pygame.image.load("sprites/Active/Water_Middle.png"),
+                (self.TILE_SIZE, self.TILE_SIZE))
+            self.sprite_path = pygame.transform.scale(
+                pygame.image.load("sprites/Active/Path_Middle.png"),
+                (self.TILE_SIZE, self.TILE_SIZE))
+            self.sprite_tree = pygame.transform.scale(
+                pygame.image.load("sprites/Active/Oak_Tree.png"),
+                (self.TILE_SIZE, self.TILE_SIZE))
+
+            # Load player sprite sheet and extract first frame
+            player_sheet = pygame.image.load("sprites/Active/Player.png")
+            self.sprite_player = pygame.Surface((16, 16), pygame.SRCALPHA)
+            self.sprite_player.blit(player_sheet, (0, 0), (0, 0, 16, 16))
+            self.sprite_player = pygame.transform.scale(self.sprite_player,
+                (self.TILE_SIZE, self.TILE_SIZE))
+
+            # Load enemy sprites
+            slime_sheet = pygame.image.load("sprites/Active/Slime_Green.png")
+            self.sprite_slime = pygame.Surface((16, 16), pygame.SRCALPHA)
+            self.sprite_slime.blit(slime_sheet, (0, 0), (0, 0, 16, 16))
+            self.sprite_slime = pygame.transform.scale(self.sprite_slime,
+                (self.TILE_SIZE, self.TILE_SIZE))
+
+            skeleton_sheet = pygame.image.load("sprites/Active/Skeleton.png")
+            self.sprite_skeleton = pygame.Surface((16, 16), pygame.SRCALPHA)
+            self.sprite_skeleton.blit(skeleton_sheet, (0, 0), (0, 0, 16, 16))
+            self.sprite_skeleton = pygame.transform.scale(self.sprite_skeleton,
+                (self.TILE_SIZE, self.TILE_SIZE))
+
+            self.sprites_loaded = True
+        except Exception as e:
+            print(f"Warning: Could not load sprites: {e}")
+            self.sprites_loaded = False
 
     def run(self):
         """Main game loop"""
@@ -714,15 +759,29 @@ class RPGGameGUI:
 
                 # Draw tile based on type
                 if tile == self.TILE_GRASS:
-                    pygame.draw.rect(self.screen, (34, 139, 34), (x, y, self.TILE_SIZE, self.TILE_SIZE))
+                    if self.sprites_loaded:
+                        self.screen.blit(self.sprite_grass, (x, y))
+                    else:
+                        pygame.draw.rect(self.screen, (34, 139, 34), (x, y, self.TILE_SIZE, self.TILE_SIZE))
                 elif tile == self.TILE_WATER:
-                    pygame.draw.rect(self.screen, (30, 144, 255), (x, y, self.TILE_SIZE, self.TILE_SIZE))
+                    if self.sprites_loaded:
+                        self.screen.blit(self.sprite_water, (x, y))
+                    else:
+                        pygame.draw.rect(self.screen, (30, 144, 255), (x, y, self.TILE_SIZE, self.TILE_SIZE))
                 elif tile == self.TILE_TREE:
-                    pygame.draw.rect(self.screen, (0, 100, 0), (x, y, self.TILE_SIZE, self.TILE_SIZE))
+                    if self.sprites_loaded:
+                        # Draw grass underneath tree
+                        self.screen.blit(self.sprite_grass, (x, y))
+                        self.screen.blit(self.sprite_tree, (x, y))
+                    else:
+                        pygame.draw.rect(self.screen, (0, 100, 0), (x, y, self.TILE_SIZE, self.TILE_SIZE))
                 elif tile == self.TILE_MOUNTAIN:
                     pygame.draw.rect(self.screen, GRAY, (x, y, self.TILE_SIZE, self.TILE_SIZE))
                 elif tile == self.TILE_ROAD:
-                    pygame.draw.rect(self.screen, (139, 90, 43), (x, y, self.TILE_SIZE, self.TILE_SIZE))
+                    if self.sprites_loaded:
+                        self.screen.blit(self.sprite_path, (x, y))
+                    else:
+                        pygame.draw.rect(self.screen, (139, 90, 43), (x, y, self.TILE_SIZE, self.TILE_SIZE))
                 elif tile == self.TILE_BUILDING:
                     pygame.draw.rect(self.screen, (139, 69, 19), (x, y, self.TILE_SIZE, self.TILE_SIZE))
 
@@ -751,26 +810,34 @@ class RPGGameGUI:
             enemy_y = enemy["y"] - self.camera_y
             # Only draw if on screen
             if -self.TILE_SIZE < enemy_x < SCREEN_WIDTH and -self.TILE_SIZE < enemy_y < SCREEN_HEIGHT:
-                pygame.draw.circle(self.screen, enemy["color"],
-                                 (int(enemy_x + self.TILE_SIZE // 2), int(enemy_y + self.TILE_SIZE // 2)),
-                                 self.TILE_SIZE // 3)
-                # Draw type
-                type_surf = self.small_font.render(enemy["type"][0], True, WHITE)
-                type_rect = type_surf.get_rect(center=(enemy_x + self.TILE_SIZE // 2, enemy_y + self.TILE_SIZE // 2))
-                self.screen.blit(type_surf, type_rect)
+                if self.sprites_loaded and enemy["type"] == "Slime":
+                    self.screen.blit(self.sprite_slime, (enemy_x, enemy_y))
+                elif self.sprites_loaded and enemy["type"] in ["Goblin", "Wolf"]:
+                    self.screen.blit(self.sprite_skeleton, (enemy_x, enemy_y))
+                else:
+                    pygame.draw.circle(self.screen, enemy["color"],
+                                     (int(enemy_x + self.TILE_SIZE // 2), int(enemy_y + self.TILE_SIZE // 2)),
+                                     self.TILE_SIZE // 3)
+                    # Draw type
+                    type_surf = self.small_font.render(enemy["type"][0], True, WHITE)
+                    type_rect = type_surf.get_rect(center=(enemy_x + self.TILE_SIZE // 2, enemy_y + self.TILE_SIZE // 2))
+                    self.screen.blit(type_surf, type_rect)
 
         # Draw player
         player_screen_x = self.player_x - self.camera_x
         player_screen_y = self.player_y - self.camera_y
-        pygame.draw.circle(self.screen, YELLOW,
-                         (int(player_screen_x + self.TILE_SIZE // 2),
-                          int(player_screen_y + self.TILE_SIZE // 2)),
-                         self.TILE_SIZE // 2)
-        # Draw player indicator
-        pygame.draw.circle(self.screen, WHITE,
-                         (int(player_screen_x + self.TILE_SIZE // 2),
-                          int(player_screen_y + self.TILE_SIZE // 2)),
-                         self.TILE_SIZE // 2, 2)
+        if self.sprites_loaded:
+            self.screen.blit(self.sprite_player, (player_screen_x, player_screen_y))
+        else:
+            pygame.draw.circle(self.screen, YELLOW,
+                             (int(player_screen_x + self.TILE_SIZE // 2),
+                              int(player_screen_y + self.TILE_SIZE // 2)),
+                             self.TILE_SIZE // 2)
+            # Draw player indicator
+            pygame.draw.circle(self.screen, WHITE,
+                             (int(player_screen_x + self.TILE_SIZE // 2),
+                              int(player_screen_y + self.TILE_SIZE // 2)),
+                             self.TILE_SIZE // 2, 2)
 
         # Draw HUD
         self.draw_map_hud()
