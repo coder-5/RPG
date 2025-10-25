@@ -96,6 +96,28 @@ class TextBox:
 class RPGGameGUI:
     """Main game GUI class"""
 
+    # Map constants
+    TILE_SIZE = 32
+    MAP_WIDTH = 50
+    MAP_HEIGHT = 50
+    PLAYER_SPEED = 4
+
+    # Map tile types
+    TILE_GRASS = 0
+    TILE_WATER = 1
+    TILE_TREE = 2
+    TILE_MOUNTAIN = 3
+    TILE_ROAD = 4
+    TILE_BUILDING = 5
+
+    # Town layout constants
+    TOWN_CENTER_X = 25
+    TOWN_CENTER_Y = 25
+    TOWN_SIZE = 10
+
+    # Enemy spawn constants
+    NUM_ENEMIES = 15
+
     def __init__(self):
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         pygame.display.set_caption("RPG Adventure")
@@ -124,6 +146,21 @@ class RPGGameGUI:
         self.scroll_offset = 0
         self.selected_class = "Warrior"
 
+        # Map state
+        self.player_x = 400
+        self.player_y = 300
+        self.camera_x = 0
+        self.camera_y = 0
+        self.map_tiles = []
+        self.npcs = []
+        self.enemies_on_map = []
+        self.buildings = []
+
+        # Dialog state
+        self.dialog_active = False
+        self.dialog_npc_name = ""
+        self.dialog_text = ""
+
         self.running = True
 
     def run(self):
@@ -144,6 +181,8 @@ class RPGGameGUI:
                 self.handle_main_menu_events(event)
             elif self.state == "character_creation":
                 self.handle_character_creation_events(event)
+            elif self.state == "map":
+                self.handle_map_events(event)
             elif self.state == "game":
                 self.handle_game_events(event)
             elif self.state == "combat":
@@ -159,7 +198,8 @@ class RPGGameGUI:
 
     def update(self):
         """Update game logic"""
-        pass
+        if self.state == "map":
+            self.update_map()
 
     def draw(self):
         """Draw everything"""
@@ -169,6 +209,8 @@ class RPGGameGUI:
             self.draw_main_menu()
         elif self.state == "character_creation":
             self.draw_character_creation()
+        elif self.state == "map":
+            self.draw_map_screen()
         elif self.state == "game":
             self.draw_game_screen()
         elif self.state == "combat":
@@ -268,7 +310,8 @@ class RPGGameGUI:
             self.player = Player(name, self.selected_class)
             self.world = GameWorld()
             self.enemies_defeated = 0
-            self.state = "game"
+            self.init_map()
+            self.state = "map"
 
         if self.back_button.handle_event(event):
             self.state = "main_menu"
@@ -311,6 +354,469 @@ class RPGGameGUI:
         # Buttons
         self.create_button.draw(self.screen, self.normal_font)
         self.back_button.draw(self.screen, self.normal_font)
+
+    # ===== MAP SYSTEM =====
+    def init_map(self):
+        """Initialize the game map"""
+        self.generate_terrain()
+        self.initialize_player_position()
+        self.place_npcs()
+        self.spawn_enemies()
+        self.initialize_camera()
+
+        if not hasattr(self, 'game_log'):
+            self.game_log = []
+        self.add_log_message("Welcome to the world! Use WASD or Arrow Keys to move.")
+        self.add_log_message("Press I for inventory, M for menu, Q for quests.")
+
+    def generate_terrain(self):
+        """Generate the tile-based terrain map"""
+        self.map_tiles = []
+        town_min = self.TOWN_CENTER_X - self.TOWN_SIZE // 2
+        town_max = self.TOWN_CENTER_X + self.TOWN_SIZE // 2
+
+        for y in range(self.MAP_HEIGHT):
+            row = []
+            for x in range(self.MAP_WIDTH):
+                # Create border of trees
+                if x < 2 or x > self.MAP_WIDTH - 3 or y < 2 or y > self.MAP_HEIGHT - 3:
+                    row.append(self.TILE_TREE)
+                # Town area
+                elif town_min <= x <= town_max and town_min <= y <= town_max:
+                    tile = self._get_town_tile(x, y)
+                    row.append(tile)
+                # Random water patches
+                elif (x + y) % 20 == 0:
+                    row.append(self.TILE_WATER)
+                # Random trees (10% chance)
+                elif random.random() < 0.1:
+                    row.append(self.TILE_TREE)
+                else:
+                    row.append(self.TILE_GRASS)
+            self.map_tiles.append(row)
+
+    def _get_town_tile(self, x, y):
+        """Get the appropriate tile for a town coordinate"""
+        # Roads (cross pattern)
+        if (x == self.TOWN_CENTER_X and 22 <= y <= 28) or (22 <= x <= 28 and y == self.TOWN_CENTER_Y):
+            return self.TILE_ROAD
+        # Shop building
+        elif x == 23 and y == 23:
+            return self.TILE_BUILDING
+        # Inn building
+        elif x == 27 and y == 23:
+            return self.TILE_BUILDING
+        # Guild building
+        elif x == self.TOWN_CENTER_X and y == 27:
+            return self.TILE_BUILDING
+        else:
+            return self.TILE_GRASS
+
+    def initialize_player_position(self):
+        """Set the player's starting position"""
+        self.player_x = self.TOWN_CENTER_X * self.TILE_SIZE
+        self.player_y = 15 * self.TILE_SIZE
+
+    def place_npcs(self):
+        """Place NPCs on the map"""
+        self.npcs = [
+            {"x": 23 * self.TILE_SIZE, "y": 22 * self.TILE_SIZE,
+             "name": "Shopkeeper", "color": BLUE, "dialog": "Welcome to my shop!"},
+            {"x": 27 * self.TILE_SIZE, "y": 22 * self.TILE_SIZE,
+             "name": "Innkeeper", "color": PURPLE, "dialog": "Rest here for 10 gold."},
+            {"x": self.TOWN_CENTER_X * self.TILE_SIZE, "y": 26 * self.TILE_SIZE,
+             "name": "Guild Master", "color": GOLD, "dialog": "I have quests for brave adventurers!"},
+            {"x": 20 * self.TILE_SIZE, "y": 15 * self.TILE_SIZE,
+             "name": "Village Elder", "color": WHITE, "dialog": "Beware of monsters outside town!"},
+        ]
+
+    def spawn_enemies(self):
+        """Spawn enemies outside the town area on walkable tiles"""
+        self.enemies_on_map = []
+        town_min = self.TOWN_CENTER_X - self.TOWN_SIZE // 2
+        town_max = self.TOWN_CENTER_X + self.TOWN_SIZE // 2
+
+        # Walkable tiles for enemy spawning
+        walkable_tiles = [self.TILE_GRASS, self.TILE_ROAD]
+
+        enemies_spawned = 0
+        for i in range(self.NUM_ENEMIES):
+            # Prevent infinite loop with attempt counter
+            attempts = 0
+            max_attempts = 100
+
+            while attempts < max_attempts:
+                attempts += 1
+                ex_tile = random.randint(5, self.MAP_WIDTH - 6)
+                ey_tile = random.randint(5, self.MAP_HEIGHT - 6)
+
+                # Check if outside town area
+                if not (town_min <= ex_tile <= town_max and town_min <= ey_tile <= town_max):
+                    # Check if tile is walkable
+                    if self.map_tiles[ey_tile][ex_tile] in walkable_tiles:
+                        self.enemies_on_map.append({
+                            "x": ex_tile * self.TILE_SIZE,
+                            "y": ey_tile * self.TILE_SIZE,
+                            "type": random.choice(["Slime", "Goblin", "Wolf"]),
+                            "color": random.choice([RED, DARK_RED, (255, 100, 0)])
+                        })
+                        enemies_spawned += 1
+                        break
+
+            # Warn if couldn't spawn all enemies
+            if attempts >= max_attempts:
+                print(f"Warning: Could only spawn {enemies_spawned}/{self.NUM_ENEMIES} enemies")
+                break
+
+    def initialize_camera(self):
+        """Initialize camera to center on player"""
+        self.camera_x = self.player_x - SCREEN_WIDTH // 2
+        self.camera_y = self.player_y - SCREEN_HEIGHT // 2
+
+    def handle_map_events(self, event):
+        """Handle events on the map"""
+        if event.type == pygame.KEYDOWN:
+            # If dialog is active, dismiss it on any key press
+            if self.dialog_active:
+                if event.key in [pygame.K_SPACE, pygame.K_RETURN, pygame.K_ESCAPE]:
+                    self.dialog_active = False
+                return  # Don't process other keys while dialog is open
+
+            # Normal map controls (only when no dialog)
+            if event.key == pygame.K_i:
+                self.state = "inventory"
+                self.create_inventory_ui()
+            elif event.key == pygame.K_m:
+                self.state = "game"
+                self.create_game_buttons()
+            elif event.key == pygame.K_q:
+                self.state = "quests"
+                self.create_quests_ui()
+
+    def update_map(self):
+        """Update map state (player movement, camera)"""
+        # Don't allow movement while dialog is active
+        if self.dialog_active:
+            return
+
+        # Get keys pressed
+        keys = pygame.key.get_pressed()
+
+        old_x = self.player_x
+        old_y = self.player_y
+
+        # Movement
+        if keys[pygame.K_w] or keys[pygame.K_UP]:
+            self.player_y -= self.PLAYER_SPEED
+        if keys[pygame.K_s] or keys[pygame.K_DOWN]:
+            self.player_y += self.PLAYER_SPEED
+        if keys[pygame.K_a] or keys[pygame.K_LEFT]:
+            self.player_x -= self.PLAYER_SPEED
+        if keys[pygame.K_d] or keys[pygame.K_RIGHT]:
+            self.player_x += self.PLAYER_SPEED
+
+        # Only check collisions if player actually moved
+        if old_x != self.player_x or old_y != self.player_y:
+            # Check collision with tiles
+            player_tile_x = int(self.player_x // self.TILE_SIZE)
+            player_tile_y = int(self.player_y // self.TILE_SIZE)
+
+            if (0 <= player_tile_y < len(self.map_tiles) and
+                0 <= player_tile_x < len(self.map_tiles[0])):
+                tile = self.map_tiles[player_tile_y][player_tile_x]
+                # Can't walk through water, trees, mountains, buildings
+                impassable = [self.TILE_WATER, self.TILE_TREE, self.TILE_MOUNTAIN, self.TILE_BUILDING]
+                if tile in impassable:
+                    if tile in [self.TILE_WATER, self.TILE_TREE, self.TILE_MOUNTAIN]:
+                        self.player_x = old_x
+                        self.player_y = old_y
+                    elif tile == self.TILE_BUILDING:
+                        self.check_building_interaction(player_tile_x, player_tile_y)
+                        self.player_x = old_x
+                        self.player_y = old_y
+            else:
+                # Reset position when player moves outside map boundaries
+                self.player_x = old_x
+                self.player_y = old_y
+
+            # Check collision with NPCs using proper distance calculation
+            for npc in self.npcs:
+                # Calculate Euclidean distance
+                dx = self.player_x - npc["x"]
+                dy = self.player_y - npc["y"]
+                distance = (dx * dx + dy * dy) ** 0.5
+                if distance < self.TILE_SIZE:
+                    # Show dialog box
+                    self.show_dialog(npc["name"], npc["dialog"])
+                    self.player_x = old_x
+                    self.player_y = old_y
+
+            # Check collision with enemies using proper distance calculation
+            for enemy in self.enemies_on_map[:]:
+                # Calculate Euclidean distance
+                dx = self.player_x - enemy["x"]
+                dy = self.player_y - enemy["y"]
+                distance = (dx * dx + dy * dy) ** 0.5
+                if distance < self.TILE_SIZE:
+                    # Start combat
+                    self.add_log_message(f"Encountered a {enemy['type']}!")
+                    combat_enemy = create_random_enemy(self.player.level)
+                    combat_enemy.name = enemy["type"]
+                    self.start_combat(combat_enemy)
+                    self.enemies_on_map.remove(enemy)
+                    break
+
+            # Update camera to follow player (only when player moves)
+            self.camera_x = self.player_x - SCREEN_WIDTH // 2
+            self.camera_y = self.player_y - SCREEN_HEIGHT // 2
+
+            # Clamp camera to map bounds
+            max_camera_x = len(self.map_tiles[0]) * self.TILE_SIZE - SCREEN_WIDTH
+            max_camera_y = len(self.map_tiles) * self.TILE_SIZE - SCREEN_HEIGHT
+            self.camera_x = max(0, min(self.camera_x, max_camera_x))
+            self.camera_y = max(0, min(self.camera_y, max_camera_y))
+
+    def check_building_interaction(self, tile_x, tile_y):
+        """Check which building the player is interacting with"""
+        if tile_x == 23 and tile_y == 23:
+            # Shop
+            if self.world.current_location.shop:
+                self.state = "shop"
+                self.create_shop_ui()
+        elif tile_x == 27 and tile_y == 23:
+            # Inn
+            if self.player.gold >= 10:
+                self.player.gold -= 10
+                self.player.hp = self.player.max_hp
+                self.player.mp = self.player.max_mp
+                self.add_log_message("Rested at inn. HP/MP restored! (-10 gold)")
+            else:
+                self.add_log_message("Need 10 gold to rest at the inn.")
+        elif tile_x == 25 and tile_y == 27:
+            # Guild
+            self.state = "quests"
+            self.create_quests_ui()
+
+    def show_dialog(self, npc_name, dialog_text):
+        """Show dialog box with NPC conversation"""
+        self.dialog_active = True
+        self.dialog_npc_name = npc_name
+        self.dialog_text = dialog_text
+
+    def draw_dialog_box(self):
+        """Draw the dialog box overlay"""
+        if not self.dialog_active:
+            return
+
+        # Dialog box dimensions
+        box_width = 900
+        box_height = 200
+        box_x = (SCREEN_WIDTH - box_width) // 2
+        box_y = SCREEN_HEIGHT - box_height - 50
+
+        # Semi-transparent overlay over entire screen
+        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 128))  # Semi-transparent black
+        self.screen.blit(overlay, (0, 0))
+
+        # Dialog box background
+        dialog_bg = pygame.Surface((box_width, box_height))
+        dialog_bg.fill((40, 40, 60))  # Dark blue-gray
+        self.screen.blit(dialog_bg, (box_x, box_y))
+
+        # Border
+        pygame.draw.rect(self.screen, GOLD, (box_x, box_y, box_width, box_height), 4)
+
+        # Inner border decoration
+        pygame.draw.rect(self.screen, (100, 100, 120), (box_x + 8, box_y + 8, box_width - 16, box_height - 16), 2)
+
+        # NPC name header
+        name_bg = pygame.Rect(box_x + 20, box_y - 20, 200, 40)
+        pygame.draw.rect(self.screen, (60, 60, 80), name_bg)
+        pygame.draw.rect(self.screen, GOLD, name_bg, 3)
+
+        name_surf = self.normal_font.render(self.dialog_npc_name, True, YELLOW)
+        name_rect = name_surf.get_rect(center=name_bg.center)
+        self.screen.blit(name_surf, name_rect)
+
+        # Dialog text with word wrapping
+        self.draw_wrapped_dialog_text(self.dialog_text, box_x + 30, box_y + 30, box_width - 60)
+
+        # Prompt to continue
+        prompt = self.small_font.render("Press SPACE or ENTER to continue...", True, LIGHT_GRAY)
+        prompt_rect = prompt.get_rect(bottomright=(box_x + box_width - 20, box_y + box_height - 15))
+        self.screen.blit(prompt, prompt_rect)
+
+    def draw_wrapped_dialog_text(self, text, x, y, max_width):
+        """Draw dialog text with word wrapping"""
+        words = text.split(' ')
+        lines = []
+        current_line = []
+
+        for word in words:
+            current_line.append(word)
+            test_line = ' '.join(current_line)
+            if self.normal_font.size(test_line)[0] > max_width:
+                if len(current_line) > 1:
+                    current_line.pop()
+                    lines.append(' '.join(current_line))
+                    current_line = [word]
+                else:
+                    lines.append(test_line)
+                    current_line = []
+
+        if current_line:
+            lines.append(' '.join(current_line))
+
+        # Draw each line
+        for i, line in enumerate(lines[:5]):  # Max 5 lines
+            surf = self.normal_font.render(line, True, WHITE)
+            self.screen.blit(surf, (x, y + i * 35))
+
+    def draw_map_screen(self):
+        """Draw the map view"""
+        # Draw tiles (only visible ones)
+        start_col = max(0, int(self.camera_x // self.TILE_SIZE))
+        end_col = min(len(self.map_tiles[0]), int((self.camera_x + SCREEN_WIDTH) // self.TILE_SIZE) + 1)
+        start_row = max(0, int(self.camera_y // self.TILE_SIZE))
+        end_row = min(len(self.map_tiles), int((self.camera_y + SCREEN_HEIGHT) // self.TILE_SIZE) + 1)
+
+        for row in range(start_row, end_row):
+            for col in range(start_col, end_col):
+                tile = self.map_tiles[row][col]
+                x = col * self.TILE_SIZE - self.camera_x
+                y = row * self.TILE_SIZE - self.camera_y
+
+                # Draw tile based on type
+                if tile == self.TILE_GRASS:
+                    pygame.draw.rect(self.screen, (34, 139, 34), (x, y, self.TILE_SIZE, self.TILE_SIZE))
+                elif tile == self.TILE_WATER:
+                    pygame.draw.rect(self.screen, (30, 144, 255), (x, y, self.TILE_SIZE, self.TILE_SIZE))
+                elif tile == self.TILE_TREE:
+                    pygame.draw.rect(self.screen, (0, 100, 0), (x, y, self.TILE_SIZE, self.TILE_SIZE))
+                elif tile == self.TILE_MOUNTAIN:
+                    pygame.draw.rect(self.screen, GRAY, (x, y, self.TILE_SIZE, self.TILE_SIZE))
+                elif tile == self.TILE_ROAD:
+                    pygame.draw.rect(self.screen, (139, 90, 43), (x, y, self.TILE_SIZE, self.TILE_SIZE))
+                elif tile == self.TILE_BUILDING:
+                    pygame.draw.rect(self.screen, (139, 69, 19), (x, y, self.TILE_SIZE, self.TILE_SIZE))
+
+                # Draw grid
+                s = pygame.Surface((self.TILE_SIZE, self.TILE_SIZE), pygame.SRCALPHA)
+                pygame.draw.rect(s, (0, 0, 0, 50), (0, 0, self.TILE_SIZE, self.TILE_SIZE), 1)
+                self.screen.blit(s, (x, y))
+
+        # Draw NPCs (only visible ones)
+        for npc in self.npcs:
+            npc_x = npc["x"] - self.camera_x
+            npc_y = npc["y"] - self.camera_y
+            # Only draw if on screen
+            if -self.TILE_SIZE < npc_x < SCREEN_WIDTH and -self.TILE_SIZE < npc_y < SCREEN_HEIGHT:
+                pygame.draw.circle(self.screen, npc["color"],
+                                 (int(npc_x + self.TILE_SIZE // 2), int(npc_y + self.TILE_SIZE // 2)),
+                                 self.TILE_SIZE // 3)
+                # Draw name
+                name_surf = self.small_font.render(npc["name"], True, WHITE)
+                name_rect = name_surf.get_rect(center=(npc_x + self.TILE_SIZE // 2, npc_y - 10))
+                self.screen.blit(name_surf, name_rect)
+
+        # Draw enemies (only visible ones)
+        for enemy in self.enemies_on_map:
+            enemy_x = enemy["x"] - self.camera_x
+            enemy_y = enemy["y"] - self.camera_y
+            # Only draw if on screen
+            if -self.TILE_SIZE < enemy_x < SCREEN_WIDTH and -self.TILE_SIZE < enemy_y < SCREEN_HEIGHT:
+                pygame.draw.circle(self.screen, enemy["color"],
+                                 (int(enemy_x + self.TILE_SIZE // 2), int(enemy_y + self.TILE_SIZE // 2)),
+                                 self.TILE_SIZE // 3)
+                # Draw type
+                type_surf = self.small_font.render(enemy["type"][0], True, WHITE)
+                type_rect = type_surf.get_rect(center=(enemy_x + self.TILE_SIZE // 2, enemy_y + self.TILE_SIZE // 2))
+                self.screen.blit(type_surf, type_rect)
+
+        # Draw player
+        player_screen_x = self.player_x - self.camera_x
+        player_screen_y = self.player_y - self.camera_y
+        pygame.draw.circle(self.screen, YELLOW,
+                         (int(player_screen_x + self.TILE_SIZE // 2),
+                          int(player_screen_y + self.TILE_SIZE // 2)),
+                         self.TILE_SIZE // 2)
+        # Draw player indicator
+        pygame.draw.circle(self.screen, WHITE,
+                         (int(player_screen_x + self.TILE_SIZE // 2),
+                          int(player_screen_y + self.TILE_SIZE // 2)),
+                         self.TILE_SIZE // 2, 2)
+
+        # Draw HUD
+        self.draw_map_hud()
+
+        # Draw dialog box on top (if active)
+        self.draw_dialog_box()
+
+    def draw_map_hud(self):
+        """Draw HUD overlay on map"""
+        # Top bar with stats
+        hud_height = 80
+        pygame.draw.rect(self.screen, (0, 0, 0, 200), (0, 0, SCREEN_WIDTH, hud_height))
+        pygame.draw.rect(self.screen, WHITE, (0, 0, SCREEN_WIDTH, hud_height), 2)
+
+        # Player info
+        info_y = 10
+        name_text = self.normal_font.render(f"{self.player.name} - Lv{self.player.level} {self.player.char_class}", True, GOLD)
+        self.screen.blit(name_text, (10, info_y))
+
+        # HP bar
+        hp_x = 10
+        hp_y = 45
+        hp_width = 200
+        hp_height = 20
+        hp_percent = self.player.hp / self.player.max_hp
+        pygame.draw.rect(self.screen, DARK_RED, (hp_x, hp_y, hp_width, hp_height))
+        pygame.draw.rect(self.screen, RED, (hp_x, hp_y, hp_width * hp_percent, hp_height))
+        pygame.draw.rect(self.screen, WHITE, (hp_x, hp_y, hp_width, hp_height), 2)
+        hp_text = self.small_font.render(f"HP: {self.player.hp}/{self.player.max_hp}", True, WHITE)
+        self.screen.blit(hp_text, (hp_x + 5, hp_y + 2))
+
+        # MP bar
+        mp_x = 220
+        mp_y = 45
+        mp_width = 200
+        mp_height = 20
+        mp_percent = self.player.mp / self.player.max_mp
+        pygame.draw.rect(self.screen, DARK_BLUE, (mp_x, mp_y, mp_width, mp_height))
+        pygame.draw.rect(self.screen, BLUE, (mp_x, mp_y, mp_width * mp_percent, mp_height))
+        pygame.draw.rect(self.screen, WHITE, (mp_x, mp_y, mp_width, mp_height), 2)
+        mp_text = self.small_font.render(f"MP: {self.player.mp}/{self.player.max_mp}", True, WHITE)
+        self.screen.blit(mp_text, (mp_x + 5, mp_y + 2))
+
+        # Gold and EXP
+        gold_text = self.normal_font.render(f"Gold: {self.player.gold}", True, GOLD)
+        self.screen.blit(gold_text, (450, info_y))
+
+        exp_text = self.small_font.render(f"EXP: {self.player.experience}/{self.player.level * 100}", True, GREEN)
+        self.screen.blit(exp_text, (450, hp_y))
+
+        # Controls hint
+        controls = self.small_font.render("WASD/Arrows: Move | I: Inventory | Q: Quests | M: Menu", True, LIGHT_GRAY)
+        self.screen.blit(controls, (650, info_y + 15))
+
+        # Location
+        location_text = self.normal_font.render(f"Location: {self.world.current_location.name}", True, WHITE)
+        self.screen.blit(location_text, (SCREEN_WIDTH - 400, info_y))
+
+        # Message log (bottom)
+        if hasattr(self, 'game_log') and self.game_log:
+            log_bg_height = 100
+            pygame.draw.rect(self.screen, (0, 0, 0, 180),
+                           (0, SCREEN_HEIGHT - log_bg_height, SCREEN_WIDTH, log_bg_height))
+            pygame.draw.rect(self.screen, WHITE,
+                           (0, SCREEN_HEIGHT - log_bg_height, SCREEN_WIDTH, log_bg_height), 1)
+
+            y_offset = SCREEN_HEIGHT - log_bg_height + 10
+            for msg in self.game_log[-3:]:  # Show last 3 messages
+                msg_surf = self.small_font.render(msg, True, GREEN)
+                self.screen.blit(msg_surf, (10, y_offset))
+                y_offset += 28
 
     # ===== MAIN GAME SCREEN =====
     def handle_game_events(self, event):
@@ -556,7 +1062,8 @@ class RPGGameGUI:
                 self.player = game_data["player"]
                 self.world = game_data["world"]
                 self.enemies_defeated = game_data.get("enemies_defeated", 0)
-                self.state = "game"
+                self.init_map()
+                self.state = "map"
                 if not hasattr(self, 'game_log'):
                     self.game_log = []
                 self.add_log_message("Game loaded!")
@@ -796,7 +1303,7 @@ class RPGGameGUI:
 
     def handle_inventory_events(self, event):
         if self.close_button.handle_event(event):
-            self.state = "game"
+            self.state = "map"
             return
 
         # Handle item clicks
@@ -823,7 +1330,7 @@ class RPGGameGUI:
             self.player.remove_item(item)
             self.add_log_message(f"Used {item.name}! Restored {item.value} HP")
 
-        self.state = "game"
+        self.state = "map"
 
     def draw_inventory_screen(self):
         # Title
@@ -877,7 +1384,7 @@ class RPGGameGUI:
 
     def handle_travel_events(self, event):
         if self.cancel_button.handle_event(event):
-            self.state = "game"
+            self.state = "map"
             return
 
         for i, button in enumerate(self.travel_buttons):
@@ -893,7 +1400,7 @@ class RPGGameGUI:
                     self.add_log_message("Ambushed during travel!")
                     self.start_combat(enemy)
                 else:
-                    self.state = "game"
+                    self.state = "map"
 
     def draw_travel_screen(self):
         # Title
@@ -920,7 +1427,7 @@ class RPGGameGUI:
 
     def handle_shop_events(self, event):
         if self.shop_close_button.handle_event(event):
-            self.state = "game"
+            self.state = "map"
             return
 
         # Handle item clicks
@@ -984,7 +1491,7 @@ class RPGGameGUI:
 
     def handle_quests_events(self, event):
         if self.quests_close_button.handle_event(event):
-            self.state = "game"
+            self.state = "map"
 
     def draw_quests_screen(self):
         # Title
@@ -1086,8 +1593,8 @@ class RPGGameGUI:
                 self.combat_enemy_turn()
                 pygame.time.set_timer(pygame.USEREVENT + 1, 0)
             elif event.type == pygame.USEREVENT + 2:
-                # Return to game
-                self.state = "game"
+                # Return to map
+                self.state = "map"
                 if not hasattr(self, 'game_log'):
                     self.game_log = []
                 self.add_log_message(f"Defeated {self.combat_enemy.name}!")
