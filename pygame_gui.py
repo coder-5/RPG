@@ -183,11 +183,11 @@ class RPGGameGUI:
                 pygame.image.load("sprites/Active/Oak_Tree.png"),
                 (self.TILE_SIZE, self.TILE_SIZE))
 
-            # Load player sprite sheet and extract first frame
-            # Make player sprite larger (64x64) so it doesn't get cut off
+            # Load player sprite sheet and extract first frame (32x32)
+            # Player sprites in the sheet are 32x32, not 16x16
             player_sheet = pygame.image.load("sprites/Active/Player.png")
-            self.sprite_player = pygame.Surface((16, 16), pygame.SRCALPHA)
-            self.sprite_player.blit(player_sheet, (0, 0), (0, 0, 16, 16))
+            self.sprite_player = pygame.Surface((32, 32), pygame.SRCALPHA)
+            self.sprite_player.blit(player_sheet, (0, 0), (0, 0, 32, 32))
             self.sprite_player = pygame.transform.scale(self.sprite_player,
                 (self.TILE_SIZE * 2, self.TILE_SIZE * 2))
 
@@ -199,8 +199,8 @@ class RPGGameGUI:
                 (self.TILE_SIZE * 2, self.TILE_SIZE * 2))
 
             skeleton_sheet = pygame.image.load("sprites/Active/Skeleton.png")
-            self.sprite_skeleton = pygame.Surface((16, 16), pygame.SRCALPHA)
-            self.sprite_skeleton.blit(skeleton_sheet, (0, 0), (0, 0, 16, 16))
+            self.sprite_skeleton = pygame.Surface((32, 32), pygame.SRCALPHA)
+            self.sprite_skeleton.blit(skeleton_sheet, (0, 0), (0, 0, 32, 32))
             self.sprite_skeleton = pygame.transform.scale(self.sprite_skeleton,
                 (self.TILE_SIZE * 2, self.TILE_SIZE * 2))
 
