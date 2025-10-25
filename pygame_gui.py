@@ -198,8 +198,33 @@ class RPGGameGUI:
 
     def update(self):
         """Update game logic"""
+        # Update map state (player movement)
         if self.state == "map":
             self.update_map()
+
+        # Handle timed events
+        for event in pygame.event.get([pygame.USEREVENT, pygame.USEREVENT + 1,
+                                      pygame.USEREVENT + 2, pygame.USEREVENT + 3]):
+            if event.type == pygame.USEREVENT:
+                # Enemy turn
+                self.combat_enemy_turn()
+                pygame.time.set_timer(pygame.USEREVENT, 0)
+            elif event.type == pygame.USEREVENT + 1:
+                # Defend restore
+                self.player.defense -= 5
+                self.combat_enemy_turn()
+                pygame.time.set_timer(pygame.USEREVENT + 1, 0)
+            elif event.type == pygame.USEREVENT + 2:
+                # Return to map
+                self.state = "map"
+                if not hasattr(self, 'game_log'):
+                    self.game_log = []
+                self.add_log_message(f"Defeated {self.combat_enemy.name}!")
+                pygame.time.set_timer(pygame.USEREVENT + 2, 0)
+            elif event.type == pygame.USEREVENT + 3:
+                # Game over
+                self.state = "main_menu"
+                pygame.time.set_timer(pygame.USEREVENT + 3, 0)
 
     def draw(self):
         """Draw everything"""
@@ -1578,31 +1603,6 @@ class RPGGameGUI:
                 if quest.reward_item:
                     self.player.add_item(quest.reward_item)
                     self.add_log_message(f"Received {quest.reward_item.name}!")
-
-    def update(self):
-        """Handle timed events"""
-        for event in pygame.event.get([pygame.USEREVENT, pygame.USEREVENT + 1,
-                                      pygame.USEREVENT + 2, pygame.USEREVENT + 3]):
-            if event.type == pygame.USEREVENT:
-                # Enemy turn
-                self.combat_enemy_turn()
-                pygame.time.set_timer(pygame.USEREVENT, 0)
-            elif event.type == pygame.USEREVENT + 1:
-                # Defend restore
-                self.player.defense -= 5
-                self.combat_enemy_turn()
-                pygame.time.set_timer(pygame.USEREVENT + 1, 0)
-            elif event.type == pygame.USEREVENT + 2:
-                # Return to map
-                self.state = "map"
-                if not hasattr(self, 'game_log'):
-                    self.game_log = []
-                self.add_log_message(f"Defeated {self.combat_enemy.name}!")
-                pygame.time.set_timer(pygame.USEREVENT + 2, 0)
-            elif event.type == pygame.USEREVENT + 3:
-                # Game over
-                self.state = "main_menu"
-                pygame.time.set_timer(pygame.USEREVENT + 3, 0)
 
 
 def main():
